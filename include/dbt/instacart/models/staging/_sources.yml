@@ -1,0 +1,12 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: aisles
+      - name: departments
+      - name: products
+      - name: orders
+      - name: order_products_prior
+      - name: order_products_train

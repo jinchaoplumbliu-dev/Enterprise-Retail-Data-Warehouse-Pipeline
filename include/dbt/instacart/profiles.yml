@@ -1,0 +1,12 @@
+instacart:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: host.docker.internal
+      port: 5433
+      user: instacart
+      password: instacart
+      dbname: instacart_warehouse
+      schema: public        # base schema; per-folder +schema overrides this
+      threads: 4
