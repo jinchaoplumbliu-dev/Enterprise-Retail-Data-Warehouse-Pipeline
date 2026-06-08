@@ -15,3 +15,14 @@ The project was initialized using Astro CLI to scaffold a local Airflow developm
 -- airflow_settings.yaml defines the warehouse_postgres connection. Airflow reaches the warehouse via host.docker.internal:5433 (the two run on separate Docker networks, so the host loopback is used rather than the service name).
 
 -- dags/ping_warehouse.py is a smoke-test DAG that queries the warehouse and asserts the raw schema exists.
+
+Extract & Load Data
+
+Add "include/data/**" into .dockerignore and .gitignore, excluding the data from the build context—it's still visible at runtime through live mounting, just not in the image.
+
+Download the 6 Instacart CSVs into include/data/ (see the dataset on Kaggle), then split them into waves inside the scheduler container:
+-- docker exec -it <...-scheduler-1> python /usr/local/airflow/include/prep/split_waves.py
+
+Load:
+    1. Trigger the setup_warehouse DAG once — creates the raw tables and loads the reference dimensions (aisles, departments, products).
+    2. Trigger the load_raw_wave DAG per wave, passing the wave in the run config, e.g. {"wave": 1}, {"wave": 2}, ...
