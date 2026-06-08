@@ -1,0 +1,20 @@
+services:
+  warehouse:
+    image: postgres:16
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: instacart
+      POSTGRES_PASSWORD: instacart
+      POSTGRES_DB: instacart_warehouse
+    volumes:
+      - warehouse_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U instacart -d instacart_warehouse" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  warehouse_data:
