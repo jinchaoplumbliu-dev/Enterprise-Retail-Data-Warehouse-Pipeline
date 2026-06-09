@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: fact_order_items
+    columns:
+      - name: product_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_product')
+                field: product_key
+      - name: user_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_user')
+                field: user_key
+      - name: time_key
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_time')
+                field: time_key
+      - name: reordered
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_id, product_id]
+
+  - name: fact_orders
+    columns:
+      - name: order_id
+        data_tests: [unique, not_null]
+      - name: user_key
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_user')
+                field: user_key
+
+  - name: dim_product
+    columns:
+      - name: product_key
+        data_tests: [unique, not_null]
+  - name: dim_user
+    columns:
+      - name: user_key
+        data_tests: [unique, not_null]
+  - name: dim_time
+    columns:
+      - name: time_key
+        data_tests: [unique, not_null]

@@ -12,3 +12,5 @@ airflow.cfg
 airflow.db
 include/data/**
 logs/
+include/dbt/instacart/target/
+include/dbt/instacart/dbt_packages/
