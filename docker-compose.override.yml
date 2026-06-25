@@ -1,20 +1,16 @@
+# Astro mounts dags/ and include/ by default, but our supporting code lives at
+# the project root. Mount it explicitly so the BashOperator tasks can see it,
+# and mount the host AWS dir so boto3 in the container can use the SSO session
+# (run `aws sso login --profile instacart` on the host first).
 services:
-  warehouse:
-    image: postgres:16
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_USER: instacart
-      POSTGRES_PASSWORD: instacart
-      POSTGRES_DB: instacart_warehouse
+  scheduler:
     volumes:
-      - warehouse_data:/var/lib/postgresql/data
-      - ./sql:/docker-entrypoint-initdb.d
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U instacart -d instacart_warehouse" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  warehouse_data:
+      - ./src:/usr/local/airflow/src
+      - ./config:/usr/local/airflow/config
+      - ./dbt:/usr/local/airflow/dbt
+      - ./data:/usr/local/airflow/data
+      # mount to the astro user's HOME so boto3 finds ~/.aws/config + sso cache
+      - type: bind
+        source: ${USERPROFILE}/.aws
+        target: /home/astro/.aws
+        read_only: true

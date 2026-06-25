@@ -1,0 +1,61 @@
+target_schema: raw
+s3_prefix: raw          # base prefix in S3: s3://<bucket>/<s3_prefix>/<table>/<file>.csv
+
+tables:
+  - name: aisles
+    load_mode: full
+    source_file: aisles.csv
+    columns:
+      - { name: aisle_id, type: integer }
+      - { name: aisle, type: text }
+
+  - name: departments
+    load_mode: full
+    source_file: departments.csv
+    columns:
+      - { name: department_id, type: integer }
+      - { name: department, type: text }
+
+  - name: products
+    load_mode: full
+    source_file: products.csv
+    columns:
+      - { name: product_id, type: integer }
+      - { name: product_name, type: text }
+      - { name: aisle_id, type: integer }
+      - { name: department_id, type: integer }
+
+  - name: orders
+    load_mode: wave
+    wave_dir: waves/orders
+    wave_column: order_number
+    columns:
+      - { name: order_id, type: bigint }
+      - { name: user_id, type: bigint }
+      - { name: eval_set, type: text }
+      - { name: order_number, type: integer }
+      - { name: order_dow, type: integer }
+      - { name: order_hour_of_day, type: integer }
+      - { name: days_since_prior_order, type: numeric }
+
+  - name: order_products_prior
+    load_mode: wave
+    wave_dir: waves/order_products_prior
+    wave_column: order_number
+    columns:
+      - { name: order_id, type: bigint }
+      - { name: product_id, type: integer }
+      - { name: add_to_cart_order, type: integer }
+      - { name: reordered, type: integer }
+      - { name: order_number, type: integer }   # appended during the wave split
+
+  - name: order_products_train
+    load_mode: wave
+    wave_dir: waves/order_products_train
+    wave_column: order_number
+    columns:
+      - { name: order_id, type: bigint }
+      - { name: product_id, type: integer }
+      - { name: add_to_cart_order, type: integer }
+      - { name: reordered, type: integer }
+      - { name: order_number, type: integer }   # appended during the wave split

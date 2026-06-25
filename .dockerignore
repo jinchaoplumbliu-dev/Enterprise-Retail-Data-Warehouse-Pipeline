@@ -1,9 +1,12 @@
-astro
+# Keep the build context small. These are either huge, regenerated, or mounted
+# into the container at runtime via docker-compose.override.yml.
 .git
-.env
-airflow_settings.yaml
-logs/
 .venv
-airflow.db
-airflow.cfg
-include/data/**
+data
+dbt/instacart/target
+dbt/instacart/dbt_packages
+dbt/instacart/logs
+**/__pycache__
+.astro/.local
+logs
+.env

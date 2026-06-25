@@ -1,5 +1,9 @@
-# Astro Runtime includes the following pre-installed providers packages: https://www.astronomer.io/docs/astro/runtime-image-architecture#provider-packages
-pandas
-sqlalchemy
-apache-airflow-providers-postgres
-psycopg2-binary
+# Airflow image (Astro) + Extract/Load runtime dependencies.
+# dbt is installed separately into an isolated venv (see requirements-dbt.txt and
+# the Dockerfile) because its pins clash with Airflow's.
+apache-airflow-providers-amazon
+apache-airflow-providers-snowflake
+boto3
+snowflake-connector-python
+pyyaml
+python-dotenv

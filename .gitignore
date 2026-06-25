@@ -1,16 +1,20 @@
-.git
+# secrets & local env
 .env
-.DS_Store
-airflow_settings.yaml
+.venv/
 __pycache__/
-astro
-.venv
-.astro/standalone/
-airflow-webserver.pid
-webserver_config.py
-airflow.cfg
+.DS_Store
+
+# data (downloaded CSVs + generated waves) — never commit
+data/**
+!data/.gitkeep
+
+# dbt artifacts
+dbt/instacart/target/
+dbt/instacart/dbt_packages/
+dbt/instacart/logs/
+
+# Astro / Airflow local
+airflow_settings.yaml
+.astro/.local/
 airflow.db
-include/data/**
 logs/
-include/dbt/instacart/target/
-include/dbt/instacart/dbt_packages/

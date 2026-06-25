@@ -1,0 +1,17 @@
+# dbt connects to Snowflake. Credentials come from environment variables
+# (loaded from .env), so nothing secret lives in this file.
+instacart:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      # Account identifier, e.g. "ab12345.us-east-1" or "ORG-ACCOUNT".
+      # Find it in Snowsight: bottom-left account menu -> "View account details".
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      password: "{{ env_var('SNOWFLAKE_PASSWORD') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'INSTACART_ROLE') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'INSTACART_WH') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'INSTACART') }}"
+      schema: public        # base schema; per-folder +schema overrides this
+      threads: 4
