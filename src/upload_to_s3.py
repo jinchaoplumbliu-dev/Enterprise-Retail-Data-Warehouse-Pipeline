@@ -1,5 +1,5 @@
 """
-Step 2 - upload source CSVs to S3, the landing zone Snowflake reads from.
+Upload the source CSVs to S3, the landing zone the warehouse reads from.
 
 Layout (one prefix per table, so a Snowflake stage can COPY INTO each table
 from its own folder):

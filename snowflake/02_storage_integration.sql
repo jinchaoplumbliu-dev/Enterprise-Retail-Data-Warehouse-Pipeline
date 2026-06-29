@@ -1,15 +1,15 @@
 -- =============================================================================
--- Step 4a - Storage Integration: the trust handshake between Snowflake and AWS.
+-- Storage Integration: the trust handshake between Snowflake and AWS.
 --
--- This is a back-and-forth. Follow the numbered order exactly.
--- Run the Snowflake parts as ACCOUNTADMIN.
+-- AWS and Snowflake reference each other, so the setup is a back-and-forth;
+-- follow the numbered order. Run the Snowflake parts as ACCOUNTADMIN.
 -- =============================================================================
 
 use role accountadmin;
 
 -- ---------------------------------------------------------------------------
--- (1) FIRST, in AWS, create an IAM policy + role (see README/chat for console
---     steps). Use this PERMISSION POLICY (least privilege: just our bucket):
+-- (1) FIRST, in AWS, create an IAM policy + role (see the README). Use this
+--     PERMISSION POLICY (least privilege: just this bucket's raw/ prefix):
 --
 --   {
 --     "Version": "2012-10-17",

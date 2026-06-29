@@ -1,14 +1,13 @@
 """
-API ingestion (A2) - incremental extract from Open Food Facts to S3.
+Incrementally extract products from Open Food Facts to S3.
 
-The real-world ingestion pattern, demonstrated end to end:
-  - paginated reads against a live API
-  - polite rate limiting
-  - INCREMENTAL by a high-water mark: products are returned newest-modified
+  - paginated reads against the live API
+  - polite rate limiting with retry/backoff on 5xx
+  - incremental by a high-water mark: products are returned newest-modified
     first (sort_by=last_modified_t DESC), so we page until we cross the watermark
-    and stop. The watermark is max(last_modified_t) already in Snowflake - no
-    extra state store, mirroring the order_number waves.
-  - raw JSON landed to S3, partitioned by extract date (schema-on-read later).
+    and stop. The watermark is max(last_modified_t) already in Snowflake, so no
+    separate state store is needed.
+  - raw JSON landed to S3, partitioned by extract date (parsed schema-on-read).
 
 Usage:
     python src/extract_api.py                 # incremental (watermark from Snowflake)

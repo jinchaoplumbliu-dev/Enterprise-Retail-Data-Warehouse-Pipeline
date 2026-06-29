@@ -1,7 +1,7 @@
 """
-Step 4c - load S3 files into Snowflake `raw` tables via COPY INTO.
+Load S3 files into Snowflake `raw` tables via COPY INTO.
 
-Idempotent, mirroring the original Postgres loader:
+Idempotent loads:
   - full : TRUNCATE + COPY      (reference data)
   - wave : DELETE wave + COPY   (transactional data)
 

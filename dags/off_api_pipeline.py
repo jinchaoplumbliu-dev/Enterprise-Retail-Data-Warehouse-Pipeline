@@ -1,11 +1,10 @@
 """
-Scheduled API ingestion (A5): Open Food Facts -> S3 -> Snowflake -> dbt.
+Scheduled Open Food Facts ingestion: API -> S3 -> Snowflake -> dbt.
 
     extract (incremental)  ->  load (COPY into VARIANT)  ->  dbt build (OFF models)
 
 Runs daily; each run pulls only products modified since the last watermark, so
-re-runs are cheap and idempotent. This is the API counterpart to the wave-based
-instacart_pipeline.
+re-runs are cheap and idempotent.
 """
 
 from __future__ import annotations

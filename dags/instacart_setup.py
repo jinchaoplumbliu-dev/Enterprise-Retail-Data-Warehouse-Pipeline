@@ -3,9 +3,8 @@ One-time warehouse setup (run before the first pipeline run):
 
     create raw tables  ->  upload reference CSVs to S3  ->  COPY them into raw
 
-Reuses the same src/ scripts you validated by hand in Steps 2-4, invoked here as
-BashOperator tasks. Credentials come from the injected .env (Snowflake) and the
-mounted ~/.aws SSO session (AWS).
+Invokes the src/ scripts as BashOperator tasks. Credentials come from the
+injected .env (Snowflake) and the mounted ~/.aws SSO session (AWS).
 """
 
 from __future__ import annotations

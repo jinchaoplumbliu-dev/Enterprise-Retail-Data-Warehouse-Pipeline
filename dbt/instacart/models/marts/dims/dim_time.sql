@@ -1,6 +1,6 @@
--- dbt_utils.generate_series yields a `generated_number` column 1..N and is
--- cross-database (Postgres + Snowflake). It expands to a full `with ... select`,
--- so it must be a CTE *body* (not used after `from`); subtract 1 for 0-based.
+-- dbt_utils.generate_series yields a `generated_number` column 1..N. It expands
+-- to a full `with ... select`, so it must be a CTE *body* (not used after
+-- `from`); subtract 1 for 0-based ranges.
 with days as (
     {{ dbt_utils.generate_series(7) }}
 ),

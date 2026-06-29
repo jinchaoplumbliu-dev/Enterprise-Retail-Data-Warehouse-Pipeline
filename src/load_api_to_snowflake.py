@@ -1,9 +1,9 @@
 """
-API ingestion (A3) - COPY the landed JSON into a Snowflake VARIANT table.
+COPY the landed Open Food Facts JSON into a Snowflake VARIANT table.
 
-Schema-on-read: we keep the raw product object in a VARIANT column and only
-pull out last_modified_t (for the incremental watermark) at load time. dbt does
-the real flattening downstream.
+Schema-on-read: keep the raw product object in a VARIANT column and only pull
+out last_modified_t (for the incremental watermark) at load time. dbt does the
+flattening downstream.
 
 Append-only + Snowflake's load history (FORCE=false) means re-running never
 re-loads the same S3 file; dbt deduplicates by product code keeping the latest.

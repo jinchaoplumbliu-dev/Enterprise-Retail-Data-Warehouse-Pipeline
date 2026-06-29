@@ -1,9 +1,9 @@
 -- =============================================================================
--- Step 4b - File format + external stage.
+-- File format + external stage.
 --
--- The stage is a named reference to the S3 landing zone, reached THROUGH the
--- storage integration (so no keys live here). Once LIST works, Snowflake can
--- see the files and we can COPY INTO from them (Step 4c, done in Python).
+-- The stage is a named reference to the S3 landing zone, reached through the
+-- storage integration (so no keys live here). Once LIST works, the files are
+-- visible and the loaders can COPY INTO from them.
 -- =============================================================================
 
 use role instacart_role;
@@ -26,5 +26,4 @@ create stage if not exists s3_stage
     file_format = csv_ff;
 
 -- Verify Snowflake can see the S3 files through the trust handshake.
--- Expect the reference CSVs + wave 001 files we uploaded in Step 2.
 list @s3_stage;

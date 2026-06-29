@@ -3,7 +3,7 @@ sources:
   off_products:
     base_url: https://world.openfoodfacts.org/api/v2/search
     page_size: 100             # OFF max per page
-    max_pages: 5               # bound each run for the demo (500 products max)
+    max_pages: 5               # cap products pulled per run (500)
     rate_limit_seconds: 2.0    # be polite to the free public API (it throttles)
     # Sorted by last_modified_t DESC; we page until we cross the watermark.
     sort_by: last_modified_t

@@ -1,12 +1,9 @@
 -- =============================================================================
--- Snowflake foundation for the Instacart warehouse (Phase 1).
+-- Snowflake foundation for the Instacart warehouse.
 --
--- Run this ONCE in a Snowflake worksheet, signed in as ACCOUNTADMIN.
--- It is the Snowflake equivalent of the old Postgres `warehouse` container +
--- sql/00_init_schemas.sql: it creates the compute, the database/schemas, and a
--- project-scoped role+grants that dbt and Airflow will connect as.
---
--- Replace <YOUR_SNOWFLAKE_USER> at the bottom with your login name.
+-- Run once in a Snowflake worksheet as ACCOUNTADMIN. Creates the compute, the
+-- database/schemas, and a project-scoped role + grants that dbt and Airflow
+-- connect as. Replace <YOUR_SNOWFLAKE_USER> at the bottom with the login name.
 -- =============================================================================
 
 use role accountadmin;
@@ -20,9 +17,8 @@ create warehouse if not exists instacart_wh
     initially_suspended = true
     comment             = 'Compute for the Instacart dbt pipeline';
 
--- 2. STORAGE: the analytics database (replaces Postgres `instacart_warehouse`).
---    Only `raw` is created here because our pipeline loads it. dbt creates
---    staging / intermediate / marts itself at run time.
+-- 2. STORAGE: the analytics database. Only `raw` is created here because the
+--    pipeline loads it; dbt creates staging / intermediate / marts at run time.
 create database if not exists instacart;
 create schema   if not exists instacart.raw;
 
