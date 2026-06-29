@@ -57,3 +57,9 @@ models:
     columns:
       - name: time_key
         data_tests: [unique, not_null]
+  - name: dim_food_product
+    columns:
+      - name: food_product_key
+        data_tests: [unique, not_null]
+      - name: product_code
+        data_tests: [unique, not_null]

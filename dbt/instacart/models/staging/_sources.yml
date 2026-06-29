@@ -10,3 +10,4 @@ sources:
       - name: orders
       - name: order_products_prior
       - name: order_products_train
+      - name: off_products_raw      # API ingestion: Open Food Facts (VARIANT)

@@ -1,0 +1,22 @@
+# Config for the API ingestion path (Open Food Facts product catalogue).
+sources:
+  off_products:
+    base_url: https://world.openfoodfacts.org/api/v2/search
+    page_size: 100             # OFF max per page
+    max_pages: 5               # bound each run for the demo (500 products max)
+    rate_limit_seconds: 2.0    # be polite to the free public API (it throttles)
+    # Sorted by last_modified_t DESC; we page until we cross the watermark.
+    sort_by: last_modified_t
+    watermark_field: last_modified_t
+    fields:
+      - code
+      - product_name
+      - brands
+      - categories_tags
+      - countries_tags
+      - nutriments
+      - last_modified_t
+    # Land under the existing raw/ prefix so it reuses the same storage
+    # integration + IAM policy + stage (no extra AWS console changes).
+    s3_prefix: raw/off_products_api      # s3://<bucket>/raw/off_products_api/dt=.../
+    raw_table: off_products_raw          # Snowflake raw.<raw_table> (VARIANT)
