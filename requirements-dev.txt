@@ -1,0 +1,6 @@
+# Local dev + CI: just what the unit tests need to import the src/ scripts.
+pytest
+boto3
+snowflake-connector-python
+pyyaml
+python-dotenv

@@ -1,7 +1,6 @@
--- A product dimension sourced from the Open Food Facts API (the incremental
--- ingestion path), with per-100g nutrition attributes. A standalone data
--- product: its natural key is the OFF barcode, independent of the Instacart
--- catalogue.
+-- Product dimension from the Open Food Facts API path, with per-100g
+-- nutrition. Its natural key is the OFF barcode, so it stands apart from
+-- the Instacart product catalogue.
 select
     {{ dbt_utils.generate_surrogate_key(['product_code']) }} as food_product_key,
     product_code,

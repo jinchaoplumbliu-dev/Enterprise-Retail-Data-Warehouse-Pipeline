@@ -1,17 +1,13 @@
 """
-Incrementally extract products from Open Food Facts to S3.
+Incremental extract of Open Food Facts products to S3.
 
-  - paginated reads against the live API
-  - polite rate limiting with retry/backoff on 5xx
-  - incremental by a high-water mark: products are returned newest-modified
-    first (sort_by=last_modified_t DESC), so we page until we cross the watermark
-    and stop. The watermark is max(last_modified_t) already in Snowflake, so no
-    separate state store is needed.
-  - raw JSON landed to S3, partitioned by extract date (parsed schema-on-read).
+The API returns products newest-modified first, so we page until we cross the
+watermark (max last_modified_t already in Snowflake) and stop. Raw JSON is
+written to S3 under a dt= partition; parsing happens downstream in dbt.
 
 Usage:
-    python src/extract_api.py                 # incremental (watermark from Snowflake)
-    python src/extract_api.py --full          # ignore watermark (backfill up to max_pages)
+    python src/extract_api.py            # incremental
+    python src/extract_api.py --full     # ignore watermark, pull up to max_pages
 """
 
 from __future__ import annotations
@@ -70,7 +66,7 @@ def fetch_page(cfg: dict, page: int, max_retries: int = 8) -> list[dict]:
     }
     url = cfg["base_url"] + "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    # The free OFF service throttles with intermittent 5xx; retry with backoff.
+    # OFF throttles with intermittent 5xx, retry those with backoff
     for attempt in range(1, max_retries + 1):
         try:
             with urllib.request.urlopen(req, timeout=60) as resp:
@@ -92,7 +88,7 @@ def extract(cfg: dict, watermark: int) -> list[dict]:
         try:
             products = fetch_page(cfg, page)
         except (urllib.error.HTTPError, urllib.error.URLError) as exc:
-            # Persistent failure: keep what we have, resume on the next run.
+            # keep what we have, the next run picks up from the watermark
             print(f"  page {page}: giving up ({exc}); stopping with {len(new_rows)} rows so far")
             break
         if not products:
@@ -101,7 +97,7 @@ def extract(cfg: dict, watermark: int) -> list[dict]:
         new_rows.extend(fresh)
         print(f"  page {page}: {len(products)} fetched, {len(fresh)} newer than watermark")
         if len(fresh) < len(products):
-            break  # crossed the watermark - everything older is already loaded
+            break  # crossed the watermark
         time.sleep(cfg["rate_limit_seconds"])
     return new_rows
 
@@ -133,7 +129,8 @@ def main() -> None:
     day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%H%M%S")
     key = f"{cfg['s3_prefix']}/dt={day}/products_{stamp}.json"
-    body = json.dumps(rows).encode("utf-8")           # JSON array -> STRIP_OUTER_ARRAY in Snowflake
+    # written as a JSON array, loaded with strip_outer_array on the Snowflake side
+    body = json.dumps(rows).encode("utf-8")
     client.put_object(Bucket=bucket, Key=key, Body=body)
     print(f"Wrote {len(rows):,} products -> s3://{bucket}/{key} ({len(body) / 1e6:.2f} MB)")
 

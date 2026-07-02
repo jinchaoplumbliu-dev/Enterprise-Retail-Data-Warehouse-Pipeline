@@ -1,10 +1,9 @@
 """
-Scheduled Open Food Facts ingestion: API -> S3 -> Snowflake -> dbt.
+Daily Open Food Facts ingestion: extract from the API to S3, COPY into the
+VARIANT table, then dbt build for the OFF models.
 
-    extract (incremental)  ->  load (COPY into VARIANT)  ->  dbt build (OFF models)
-
-Runs daily; each run pulls only products modified since the last watermark, so
-re-runs are cheap and idempotent.
+Each run only pulls products modified since the last watermark, so re-runs
+are cheap and idempotent.
 """
 
 from __future__ import annotations

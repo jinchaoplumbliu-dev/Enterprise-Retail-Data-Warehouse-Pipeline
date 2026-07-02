@@ -1,12 +1,11 @@
 """
 COPY the landed Open Food Facts JSON into a Snowflake VARIANT table.
 
-Schema-on-read: keep the raw product object in a VARIANT column and only pull
-out last_modified_t (for the incremental watermark) at load time. dbt does the
-flattening downstream.
-
-Append-only + Snowflake's load history (FORCE=false) means re-running never
-re-loads the same S3 file; dbt deduplicates by product code keeping the latest.
+The raw product object stays in a VARIANT column; only last_modified_t is
+pulled out at load time for the incremental watermark, dbt flattens the rest.
+The table is append-only and the COPY relies on Snowflake's load history
+(FORCE defaults to false), so re-running never re-loads an S3 file that is
+already in. Dedup by product code happens in dbt.
 
 Usage:
     python src/load_api_to_snowflake.py --setup    # create the VARIANT table
@@ -26,7 +25,7 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "api_sources.yml"
 SCHEMA = "raw"
-STAGE = "s3_stage"            # existing stage at s3://<bucket>/raw/
+STAGE = "s3_stage"  # existing stage at s3://<bucket>/raw/
 
 
 def load_config() -> dict:
@@ -57,8 +56,7 @@ def create_table(cur, table: str) -> None:
 
 def copy_in(cur, cfg: dict) -> None:
     table = cfg["raw_table"]
-    # s3_prefix is 'raw/off_products_api'; the stage root is 'raw/', so the
-    # path under the stage is everything after 'raw/'.
+    # the stage root is already raw/, so drop that from s3_prefix
     subpath = cfg["s3_prefix"].split("/", 1)[1]
     cur.execute(
         f"copy into {SCHEMA}.{table} (payload, last_modified_t)\n"
@@ -79,8 +77,7 @@ def main() -> None:
     conn = connect()
     cur = conn.cursor()
     try:
-        # Idempotent (create table if not exists), so the DAG never needs a
-        # separate setup step. The --setup flag is kept for parity/clarity.
+        # create table if not exists, so the DAG needs no separate setup step
         create_table(cur, cfg["raw_table"])
         print("Loading API JSON:")
         copy_in(cur, cfg)

@@ -1,17 +1,15 @@
 """
-Upload the source CSVs to S3, the landing zone the warehouse reads from.
+Upload the source CSVs to the S3 landing zone.
 
-Layout (one prefix per table, so a Snowflake stage can COPY INTO each table
-from its own folder):
+Files go to s3://<bucket>/<s3_prefix>/<table>/<file>.csv, one prefix per table
+so the Snowflake stage can COPY each table from its own folder.
 
-    s3://<bucket>/<s3_prefix>/<table>/<file>.csv
-
-Credentials come from the SSO profile named by AWS_PROFILE in .env; run
-`aws sso login --profile <name>` first so boto3 can read the cached token.
+Needs an active SSO session for the AWS_PROFILE named in .env
+(`aws sso login --profile <name>` first).
 
 Usage:
-    python src/upload_to_s3.py            # everything: reference tables + all waves
-    python src/upload_to_s3.py --full     # only the 3 reference (full) tables
+    python src/upload_to_s3.py            # reference tables + all waves
+    python src/upload_to_s3.py --full     # only the 3 reference tables
     python src/upload_to_s3.py --wave 1   # only wave 001 of the wave tables
 """
 
@@ -36,7 +34,6 @@ def load_config() -> dict:
 
 
 def make_s3_client() -> tuple:
-    """An S3 client built from the SSO profile + the target bucket name."""
     load_dotenv(ROOT / ".env")
     session = boto3.Session(
         profile_name=os.environ.get("AWS_PROFILE"),
@@ -48,7 +45,7 @@ def make_s3_client() -> tuple:
 def upload(client, bucket: str, local: Path, key: str) -> None:
     size_mb = local.stat().st_size / 1e6
     print(f"  -> s3://{bucket}/{key}  ({size_mb:,.1f} MB)")
-    client.upload_file(str(local), bucket, key)   # auto multipart for big files
+    client.upload_file(str(local), bucket, key)  # handles multipart for big files
 
 
 def upload_full(client, bucket, prefix, table) -> None:
@@ -62,7 +59,7 @@ def upload_one_wave(client, bucket, prefix, table, wave: int) -> None:
     fname = f"{table['name']}_{wave:03d}.csv"
     local = DATA_DIR / table["wave_dir"] / fname
     if not local.is_file():
-        # Some waves legitimately have no file (e.g. no train orders that low).
+        # some waves have no file, e.g. no train orders with a low order_number
         print(f"  (wave {wave:03d}: no file for {table['name']}, skip)")
         return
     upload(client, bucket, local, f"{prefix}/{table['name']}/{fname}")
@@ -91,9 +88,6 @@ def main() -> None:
     full_tables = [t for t in config["tables"] if t["load_mode"] == "full"]
     wave_tables = [t for t in config["tables"] if t["load_mode"] == "wave"]
 
-    # --full       -> reference only
-    # --wave N      -> that wave of the wave tables only
-    # (no flags)    -> reference + every wave
     do_full = args.full or args.wave is None
     do_waves = not args.full
 

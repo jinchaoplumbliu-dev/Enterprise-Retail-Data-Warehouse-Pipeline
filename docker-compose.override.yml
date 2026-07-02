@@ -1,6 +1,6 @@
-# Mount the supporting code (which lives at the project root) so the
-# BashOperator tasks can see it, and mount the host AWS dir so boto3 in the
-# container can use the SSO session (run `aws sso login` on the host first).
+# Mount the project code so the BashOperator tasks can see it, plus the host
+# ~/.aws so boto3 in the container can use the SSO session
+# (run `aws sso login` on the host first).
 services:
   scheduler:
     volumes:

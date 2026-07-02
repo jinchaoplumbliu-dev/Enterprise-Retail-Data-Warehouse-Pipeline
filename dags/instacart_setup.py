@@ -1,10 +1,9 @@
 """
-One-time warehouse setup (run before the first pipeline run):
+One-time setup before the first pipeline run: create the raw tables, upload
+the reference CSVs to S3 and COPY them in.
 
-    create raw tables  ->  upload reference CSVs to S3  ->  COPY them into raw
-
-Invokes the src/ scripts as BashOperator tasks. Credentials come from the
-injected .env (Snowflake) and the mounted ~/.aws SSO session (AWS).
+Runs the src/ scripts as BashOperator tasks. Snowflake credentials come from
+the injected .env, AWS from the mounted ~/.aws SSO session.
 """
 
 from __future__ import annotations

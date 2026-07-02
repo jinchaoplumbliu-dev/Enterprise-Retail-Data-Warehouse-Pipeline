@@ -1,21 +1,17 @@
 """
-Load S3 files into Snowflake `raw` tables via COPY INTO.
+Load S3 files into the Snowflake raw tables with COPY INTO.
 
-Idempotent loads:
-  - full : TRUNCATE + COPY      (reference data)
-  - wave : DELETE wave + COPY   (transactional data)
+Two load modes, both safe to re-run: reference tables are TRUNCATE + COPY,
+wave tables are DELETE-the-wave + COPY. The COPY runs with FORCE = TRUE
+because Snowflake's load history would otherwise skip a file it has already
+seen, and after a TRUNCATE/DELETE we do want it loaded again.
 
-COPY uses FORCE = TRUE so that re-reading a file after a TRUNCATE/DELETE actually
-re-loads it (otherwise Snowflake's load history would skip an "already loaded"
-file, breaking idempotency).
-
-Credentials come from .env. Run AFTER the stage exists (snowflake/03_stage.sql).
+Needs the stage from snowflake/03_stage.sql and credentials in .env.
 
 Usage:
-    python src/load_to_snowflake.py --setup        # create raw tables (once)
-    python src/load_to_snowflake.py --full         # load reference tables
-    python src/load_to_snowflake.py --wave 1       # load wave 001 of wave tables
-    python src/load_to_snowflake.py --setup --full --wave 1   # all three, in order
+    python src/load_to_snowflake.py --setup    # create raw tables (once)
+    python src/load_to_snowflake.py --full     # load reference tables
+    python src/load_to_snowflake.py --wave 1   # load wave 001 of wave tables
 """
 
 from __future__ import annotations
@@ -66,8 +62,7 @@ def create_raw_tables(cur, config) -> None:
 
 
 def _copy_into(cur, table, stage_path) -> None:
-    # Explicit column list + a $1..$N projection from the stage, so the table's
-    # extra _loaded_at column keeps its default instead of expecting a CSV value.
+    # explicit column list + $1..$N projection so _loaded_at keeps its default
     cols = [c["name"] for c in table["columns"]]
     col_list = ", ".join(cols)
     select_list = ", ".join(f"${i + 1}" for i in range(len(cols)))
@@ -92,8 +87,8 @@ def load_wave(cur, table, wave) -> None:
         f"delete from {SCHEMA}.{table['name']} where {wave_col} = %s", (wave,)
     )
     path = f"{table['name']}/{table['name']}_{wave:03d}.csv"
-    # Some waves legitimately have no file (e.g. no train orders that low); a
-    # COPY of a missing path errors, so guard by LISTing it first.
+    # COPY on a missing path errors, and some waves have no file for a table
+    # (no train orders with a low order_number), so LIST it first
     cur.execute(f"list @{STAGE}/{path}")
     if not cur.fetchall():
         print(f"  wave {wave:03d}: no file for {table['name']}, skip")

@@ -1,10 +1,8 @@
 """
-End-to-end pipeline for one order_number wave:
+Pipeline for one order_number wave: upload to S3, COPY into raw, dbt build.
 
-    upload wave to S3  ->  COPY wave into raw  ->  dbt build (transform + test)
-
-Trigger with a run config to pick the wave, e.g. {"wave": 2}. A failing dbt test
-fails the DAG. Run `instacart_setup` once before the first wave.
+Trigger with a run config to pick the wave, e.g. {"wave": 2}. A failing dbt
+test fails the DAG. Run instacart_setup once before the first wave.
 """
 
 from __future__ import annotations

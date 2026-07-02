@@ -1,32 +1,18 @@
 # Retail Data Warehouse on AWS S3 + Snowflake
 
-An end-to-end ELT pipeline on the Instacart Online Grocery dataset (~3.4M orders,
-~33M order line items). Two ingestion paths feed an S3 landing zone; Snowflake
-loads from S3 via an external stage; dbt models the data into a Kimball
-dimensional model; Apache Airflow orchestrates and tests it on every run.
+[![CI](https://github.com/jinchaoplumbliu-dev/Enterprise-Retail-Data-Warehouse-Pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/jinchaoplumbliu-dev/Enterprise-Retail-Data-Warehouse-Pipeline/actions/workflows/ci.yml)
 
-`Data Engineer` · `Analytics Engineer` — cloud data warehousing, dimensional
-modelling, incremental ingestion, semi-structured data, orchestration, data
-quality.
+An ELT pipeline built on the Instacart Online Grocery dataset (~3.4M orders,
+~33M order line items). Two ingestion paths — batch CSVs replayed as
+incremental waves, and a live product API pulled on a watermark — land in an
+S3 data lake; Snowflake loads them through an external stage, dbt builds a
+Kimball dimensional model on top, and Airflow orchestrates the runs with dbt
+tests acting as a quality gate. The extract/load logic is unit-tested and CI
+runs pytest + `dbt parse` on every push.
 
-## What this project demonstrates
-
-- **Cloud ELT on Snowflake** — S3 as a data lake, a storage integration + external
-  stage for keyless access, and `COPY INTO` loads (bulk CSV and JSON).
-- **Two ingestion patterns** — batch CSV replayed in `order_number` waves, and an
-  incremental API extractor with pagination, rate-limit/backoff and a high-water
-  mark.
-- **Semi-structured data** — API JSON landed into a Snowflake `VARIANT` column and
-  flattened schema-on-read in dbt.
-- **Dimensional modelling (Kimball)** — a fact constellation: two facts at two
-  grains over conformed dimensions, with degenerate dimensions and deterministic
-  surrogate keys.
-- **Idempotency end to end** — re-running any wave or extract never duplicates
-  data, at both the raw and the transformation layer.
-- **Data quality as a gate** — dbt tests run inside the pipeline; a failing test
-  fails the DAG.
-- **Least-privilege security** — AWS access via IAM Identity Center (SSO) with no
-  long-lived keys locally, and a Snowflake↔S3 trust scoped to one bucket prefix.
+This started as a Postgres project; I rebuilt it on S3 + Snowflake to work
+with a real cloud warehouse: external stages, storage integrations, `VARIANT`
+for semi-structured data, and keyless auth on both sides.
 
 ## Architecture
 
@@ -43,93 +29,97 @@ flowchart LR
     MARTS --> DQ[dbt tests]
 ```
 
-Airflow (run locally on the Astro CLI) orchestrates each pipeline:
-`load → dbt build` for the warehouse, and `extract → load → dbt build` for the
-API. The analytics warehouse is Snowflake; compute and storage are separated.
+Airflow runs locally on the Astro CLI. There are two pipelines plus a one-time
+setup DAG: `instacart_pipeline` does `upload -> COPY -> dbt build` for one wave
+of the batch data, and `off_api_pipeline` does `extract -> COPY -> dbt build`
+for the API path on a daily schedule.
 
 ### Ingestion paths
 
-| Path | Source | Cadence | Landing | Load |
-|---|---|---|---|---|
-| Batch | 6 Instacart CSVs | `order_number` waves | `raw/<table>/` CSV | `COPY INTO` per wave |
-| API | Open Food Facts | incremental (daily) | `raw/off_products_api/dt=…/` JSON | `COPY INTO` a `VARIANT` |
+**Batch.** The six Instacart CSVs. The dataset is a static snapshot, so to make
+the loads realistic I replay the transactional tables in waves keyed by
+`order_number` (wave 1 = everyone's first order, wave 2 = second orders, and so
+on). A prep script splits the big files once into per-wave CSVs; each pipeline
+run then uploads and loads a single wave. The line-item files only carry
+`order_id`, so the split builds an `order_id -> order_number` map from
+`orders.csv` and appends the wave number as an extra column.
+
+**API.** An incremental extractor for the Open Food Facts product API, with
+pagination, rate limiting and retry/backoff on 5xx. It pages newest-modified
+first and stops once it crosses the high-water mark, which is simply
+`max(last_modified_t)` already loaded in Snowflake, so there is no separate
+state store. The raw JSON lands in S3 under a `dt=YYYY-MM-DD/` partition and is
+copied into a Snowflake `VARIANT` column; dbt flattens it schema-on-read.
 
 ## Data model
 
-A fact constellation over conformed dimensions, plus a nutrition dimension from
-the API path.
+A fact constellation: two facts at different grains sharing conformed
+dimensions, plus a nutrition dimension from the API path.
 
 | Model | Grain | Materialisation |
-|---|---|---|
-| `fact_order_items` | one product in one order (~33M) | **incremental** |
+| --- | --- | --- |
+| `fact_order_items` | one product in one order (~33M) | incremental |
 | `fact_orders` | one order | table |
-| `dim_product` | product (aisle + department flattened in) | table |
+| `dim_product` | product, with aisle + department flattened in | table |
 | `dim_user` | user + behavioural attributes | table |
-| `dim_time` | day-of-week × hour-of-day (168 rows) | table |
+| `dim_time` | day-of-week x hour-of-day (168 rows) | table |
 | `dim_food_product` | Open Food Facts product + nutrition per 100g | table |
 
-`order_id`, `order_number` and `add_to_cart_order` are kept as degenerate
-dimensions on the facts. Surrogate keys (`product_key`, `user_key`, `time_key`)
-are deterministic hashes of the natural keys.
+`order_id`, `order_number` and `add_to_cart_order` stay on the facts as
+degenerate dimensions. Surrogate keys are deterministic hashes of the natural
+keys (`dbt_utils.generate_surrogate_key`), which keeps them stable across full
+rebuilds and lets the facts recompute the key from the natural key instead of
+doing a 33M-row lookup join against the dimensions.
 
-## Key design decisions
+## Design notes
 
-- **S3 landing layout: one prefix per table.** Files live under
-  `raw/<table>/…`, so the external stage maps cleanly and `COPY INTO`
-  targets exactly one table's files — and a single wave's file for incremental
-  loads.
+Things I decided on purpose, and why:
 
-- **Keyless S3 access via a storage integration.** Snowflake assumes a scoped
-  IAM role (trust pinned to Snowflake's IAM principal + external id); the role's
-  policy grants read on only this bucket's `raw/` prefix. No access keys live in
-  Snowflake or in the repo.
+- One S3 prefix per table (`raw/<table>/...`), so the external stage maps
+  cleanly and a `COPY INTO` can target one table's files, or a single wave's
+  file for the incremental loads.
 
-- **SSO for local AWS, not access keys.** Local extraction authenticates through
-  IAM Identity Center, so boto3 uses short-lived session credentials and there
-  are no long-lived keys on disk. In the container the host SSO session is
+- No access keys anywhere. Snowflake reaches S3 through a storage integration
+  that assumes a scoped IAM role (trust pinned to Snowflake's IAM principal
+  plus an external id, read access limited to this bucket's `raw/` prefix).
+  Local extraction authenticates through IAM Identity Center, so boto3 uses
+  short-lived SSO credentials; the container gets the host's SSO session
   mounted read-only.
 
-- **Hash surrogate keys, not auto-increment.** `dbt_utils.generate_surrogate_key`
-  produces a deterministic key from the natural key — stable across rebuilds and
-  independent of insert order. Because the key is a pure function of the natural
-  key, the facts **recompute** it instead of joining to dimensions, avoiding a
-  33M-row lookup join.
+- Idempotency at both layers. The raw wave load `DELETE`s the wave and re-COPYs
+  it with `FORCE = TRUE` (otherwise Snowflake's load history silently skips a
+  file it has seen before, which breaks the re-run). Downstream,
+  `fact_order_items` is a dbt incremental model (`delete+insert` on
+  `unique_key=[order_id, product_id]`) advancing on an `order_number`
+  watermark. Re-running any wave or extract never duplicates rows.
 
-- **`order_number` waves + partitioned landing.** The large files are pre-split
-  once into per-wave files, so each wave load is a small, fast `COPY` rather than
-  a re-scan of the full file. Line items only carry `order_id`, so the split
-  builds an `order_id → order_number` map from `orders` and appends it.
+- The API watermark lives in the warehouse. The extractor asks Snowflake for
+  `max(last_modified_t)` before pulling, mirroring how the wave watermark
+  works, instead of maintaining a separate state file.
 
-- **Two-layer incrementality, both idempotent.** Raw `DELETE`s the wave then
-  `COPY`s it (`FORCE = TRUE` so the reload isn't skipped by load history); the
-  line-item fact is a dbt `incremental` model (`delete+insert`,
-  `unique_key=[order_id, product_id]`) advancing on an `order_number` watermark.
+- Schema-on-read for the API. The full product JSON is kept in the `VARIANT`
+  column; dbt pulls out only the fields the model needs and deduplicates by
+  product code keeping the latest version. If I need more attributes later
+  they are already landed.
 
-- **API incrementality from the warehouse.** The extractor pages newest-modified
-  first and stops once it crosses the watermark, which is `max(last_modified_t)`
-  already in Snowflake — no separate state store, mirroring the wave watermark.
+- `prior` and `train` orders are unioned into the facts (both are completed
+  orders; a `source` flag records which split a row came from). `test` orders
+  have no basket lines and are dropped in staging.
 
-- **Schema-on-read for the API.** Product JSON lands in a `VARIANT` column; dbt
-  flattens the fields it needs and deduplicates by product code keeping the
-  latest version. New attributes can be picked up later without reloading.
-
-- **`prior ∪ train`, `test` excluded.** Both `prior` and `train` are completed
-  orders and are unioned into the facts (with a `source` flag); `test` orders
-  have no basket and are dropped.
-
-- **Cyclical time, no synthetic calendar.** The dataset has only `order_dow` +
-  `order_hour_of_day`; `dim_time` captures the cyclical time honestly (168 rows),
-  with the day-of-week → day-name mapping flagged in-model as an assumption.
+- No synthetic calendar. The dataset only has `order_dow` and
+  `order_hour_of_day`, so `dim_time` is the honest 168-row cross join.
+  Instacart never documented which day `0` is; the day-name mapping in the
+  model is flagged as an assumption.
 
 ## Tech stack
 
-- **Storage / lake:** AWS S3
-- **Warehouse:** Snowflake (separated compute + storage, `VARIANT` for JSON)
-- **Transformation / tests:** dbt-core 1.x + dbt-snowflake, dbt_utils
-- **Extract & Load:** config-driven Python (`boto3`, `snowflake-connector-python`)
-- **Orchestration:** Apache Airflow 3 (Astro Runtime, local)
-- **AWS auth:** IAM Identity Center (SSO); storage integration for Snowflake↔S3
-- **Modelling:** Kimball star / constellation schema
+- AWS S3 for the landing zone / lake
+- Snowflake as the warehouse (`VARIANT` for the JSON path)
+- dbt-core 1.x + dbt-snowflake + dbt_utils for transformation and tests
+- Config-driven Python EL scripts (`boto3`, `snowflake-connector-python`)
+- Apache Airflow 3 on Astro Runtime for orchestration
+- IAM Identity Center (SSO) for local AWS auth; storage integration for
+  Snowflake-to-S3
 
 ## Project structure
 
@@ -150,40 +140,44 @@ are deterministic hashes of the natural keys.
 │   ├── 02_storage_integration.sql  # S3 <-> Snowflake trust
 │   └── 03_stage.sql            # external stage + file format
 ├── dbt/instacart/              # dbt project (staging / intermediate / marts)
-├── dags/                       # Airflow: instacart_setup, instacart_pipeline, off_api_pipeline
+├── dags/                       # instacart_setup, instacart_pipeline, off_api_pipeline
+├── tests/                      # pytest unit tests for the EL scripts
+├── .github/workflows/ci.yml    # CI: pytest + dbt parse
 ├── Dockerfile                  # Astro image (+ isolated dbt venv)
 ├── docker-compose.override.yml # mounts src/config/dbt/data + ~/.aws into Astro
 ├── requirements.txt            # Airflow image deps
-└── requirements-dbt.txt        # dbt (isolated venv)
+├── requirements-dbt.txt        # dbt (isolated venv)
+└── requirements-dev.txt        # pytest + deps for the unit tests
 ```
 
 ## Running it
 
-Prerequisites: an AWS account (S3 + IAM Identity Center), a Snowflake account,
-the AWS CLI v2, Docker Desktop and the Astro CLI.
+You need an AWS account (S3 + IAM Identity Center), a Snowflake account, the
+AWS CLI v2, Docker Desktop and the Astro CLI.
 
-1. **Configure credentials** — copy `.env.example` to `.env` and fill in the
-   bucket and Snowflake details; `aws configure sso` once for the local profile.
+1. Copy `.env.example` to `.env` and fill in the bucket and Snowflake details.
+   Run `aws configure sso` once to set up the local profile.
 
-2. **Provision Snowflake** — run `snowflake/01_setup.sql`,
-   `02_storage_integration.sql` (with the IAM role handshake) and `03_stage.sql`.
+2. Provision Snowflake: run `snowflake/01_setup.sql`, then
+   `02_storage_integration.sql` (this one is a back-and-forth with the AWS IAM
+   console, follow the numbered steps in the file), then `03_stage.sql`.
 
-3. **Get the data** — download the 6 Instacart CSVs into `data/` (see
+3. Download the six Instacart CSVs into `data/` (see
    [Kaggle](https://www.kaggle.com/datasets/yasserh/instacart-online-grocery-basket-analysis-dataset))
    and split them into waves with `src/prep/split_waves.py`.
 
-4. **Run locally** —
+4. Start Airflow and run the DAGs:
 
    ```bash
    aws sso login --profile instacart   # refresh the SSO session
-   astro dev start                      # build the image and start Airflow
+   astro dev start                     # build the image and start Airflow
    ```
 
-   Trigger `instacart_setup` once, then `instacart_pipeline` per wave
-   (`{"wave": 1}`, `{"wave": 2}`, …). The `off_api_pipeline` runs the Open Food
-   Facts ingestion on a daily schedule.
+   Trigger `instacart_setup` once, then `instacart_pipeline` per wave with a
+   run config (`{"wave": 1}`, `{"wave": 2}`, ...). `off_api_pipeline` runs
+   daily on its own.
 
-### Verify
+To check the loads worked:
 
 ```sql
 -- the line-item fact grows as waves are loaded, with no duplicates
@@ -197,14 +191,20 @@ where d.product_key is null;
 
 ## Data quality
 
-`dbt build` runs the test suite on every pipeline run:
+`dbt build` runs the tests on every pipeline run, and a failing test fails the
+DAG:
 
 - `unique` / `not_null` on every surrogate key
-- `relationships` from each fact key to its dimension (referential integrity)
-- `accepted_values` on `reordered` (`0` / `1`)
-- `dbt_utils.unique_combination_of_columns` on `(order_id, product_id)` — the
-  guard against incremental-load duplicates
-- `unique` / `not_null` on the API product code and surrogate key
+- `relationships` from each fact key to its dimension
+- `accepted_values` on `reordered`
+- `dbt_utils.unique_combination_of_columns` on `(order_id, product_id)`, which
+  is the guard against incremental-load duplicates
+- `unique` / `not_null` on the API product code and its surrogate key
+
+The Python side has unit tests too (`pip install -r requirements-dev.txt`,
+then `pytest`): the wave split, the extractor's watermark and retry/backoff
+logic, the COPY statement generation and the config contracts. CI runs them on
+every push, along with a `dbt parse` to validate the dbt project.
 
 ## Credits
 

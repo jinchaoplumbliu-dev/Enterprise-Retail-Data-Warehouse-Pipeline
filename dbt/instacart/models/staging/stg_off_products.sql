@@ -1,5 +1,5 @@
--- Schema-on-read: flatten the Open Food Facts VARIANT payload into typed columns
--- and deduplicate by product code, keeping the most recently modified version.
+-- Flatten the Open Food Facts VARIANT payload into typed columns and dedupe
+-- by product code, keeping the most recently modified version.
 with src as (
     select payload, last_modified_t
     from {{ source('raw', 'off_products_raw') }}
